@@ -1,148 +1,264 @@
-# README
+# ai_text_outline
 
-> **Note:** This readme template is based on one from the [Good Docs Project](https://thegooddocsproject.dev). You can find it and a guide to filling it out [here](https://gitlab.com/tgdp/templates/-/tree/main/readme). (_Erase this note after filling out the readme._)
+Extract Table of Contents from Tibetan texts and return character indices of where each section begins.
 
-<h1 align="center">
-  <br>
-  <a href="https://openpecha.org"><img src="https://avatars.githubusercontent.com/u/82142807?s=400&u=19e108a15566f3a1449bafb03b8dd706a72aebcd&v=4" alt="OpenPecha" width="150"></a>
-  <br>
-</h1>
+## Features
 
-## _Project Name_
-_The project name should match its code's capability so that new users can easily understand what it does._
+- **Automatic ToC detection** using དཀར་ཆག (dkar chag) markers
+- **Regex-based extraction** for structured ToC sections
+- **LLM-powered fallback** using Google Gemini, OpenAI, or Anthropic Claude
+- **Multi-provider support** — choose your preferred LLM
+- **Fuzzy matching** to locate sections even with text variations
+- **Efficient API usage** — only sends relevant ToC sections to the LLM, not the entire text
 
-## Owner(s)
+## Installation
 
-_Change to the owner(s) of the new repo. (This template's owners are:)_
-- [@ngawangtrinley](https://github.com/ngawangtrinley)
-- [@mikkokotila](https://github.com/mikkokotila)
-- [@evanyerburgh](https://github.com/evanyerburgh)
+### Basic Installation
 
+```bash
+pip install ai_text_outline
+```
 
-## Table of contents
-<p align="center">
-  <a href="#project-description">Project description</a> •
-  <a href="#who-this-project-is-for">Who this project is for</a> •
-  <a href="#project-dependencies">Project dependencies</a> •
-  <a href="#instructions-for-use">Instructions for use</a> •
-  <a href="#contributing-guidelines">Contributing guidelines</a> •
-  <a href="#additional-documentation">Additional documentation</a> •
-  <a href="#how-to-get-help">How to get help</a> •
-  <a href="#terms-of-use">Terms of use</a>
-</p>
-<hr>
+### With Specific LLM Provider
 
-## Project description
-_Use one of these:_
+Install with support for a specific LLM provider:
 
-With _Project Name_ you can _verb_ _noun_...
+```bash
+# For Google Gemini (recommended)
+pip install ai_text_outline[gemini]
 
-_Project Name_ helps you _verb_ _noun_...
+# For OpenAI
+pip install ai_text_outline[openai]
 
+# For Anthropic Claude
+pip install ai_text_outline[claude]
 
-## Who this project is for
-This project is intended for _target user_ who wants to _user objective_.
+# For all providers
+pip install ai_text_outline[all]
+```
 
+### For Development
 
-## Project dependencies
-Before using _Project Name_, ensure you have:
-* python _version_
-* _Prerequisite 2_
-* _Prerequisite 3..._
+```bash
+pip install -e ".[dev,all]"
+```
 
+## Configuration
 
-## Instructions for use
-Get started with _Project Name_ by _(write the first step a user needs to start using the project. Use a verb to start.)_.
+### Environment Variables
 
+The package requires an API key for at least one LLM provider. Set one of the following environment variables:
 
-### Install _Project Name_
-1. _Write the step here._ 
+#### Google Gemini (Recommended)
+```bash
+export GEMINI_API_KEY="your-gemini-api-key-here"
+```
 
-    _Explanatory text here_ 
-    
-    _(Optional: Include a code sample or screenshot that helps your users complete this step.)_
+Get your API key at: https://ai.google.dev/
 
-2. _Write the step here._
- 
-    a. _Substep 1_ 
-    
-    b. _Substep 2_
+#### OpenAI
+```bash
+export OPENAI_API_KEY="your-openai-api-key-here"
+```
 
+#### Anthropic Claude
+```bash
+export ANTHROPIC_API_KEY="your-anthropic-api-key-here"
+```
 
-### Configure _Project Name_
-1. _Write the step here._
-2. _Write the step here._
+#### Multiple Providers
 
+If you set multiple API keys, the package uses this priority order:
+1. **Gemini** (if `GEMINI_API_KEY` is set)
+2. **OpenAI** (if `OPENAI_API_KEY` is set)
+3. **Claude** (if `ANTHROPIC_API_KEY` is set)
 
-### Run _Project Name_
-1. _Write the step here._
-2. _Write the step here._
+You can override the default provider by passing `provider` parameter to the function.
 
+## Usage
 
-### Troubleshoot _Project Name_
-1. _Write the step here._
-2. _Write the step here._
+### Basic Usage
 
-<table>
-  <tr>
-   <td>
-    Issue
-   </td>
-   <td>
-    Solution
-   </td>
-  </tr>
-  <tr>
-   <td>
-    _Describe the issue here_
-   </td>
-   <td>
-    _Write solution here_
-   </td>
-  </tr>
-  <tr>
-   <td>
-    _Describe the issue here_
-   </td>
-   <td>
-    _Write solution here_
-   </td>
-  </tr>
-  <tr>
-   <td>
-    _Describe the issue here_
-   </td>
-   <td>
-    _Write solution here_
-   </td>
-  </tr>
-</table>
+Extract ToC from a file:
 
+```python
+from ai_text_outline import extract_toc_indices
 
-Other troubleshooting supports:
-* _Link to FAQs_
-* _Link to runbooks_
-* _Link to other relevant support information_
+# Extract from file
+indices = extract_toc_indices(file_path="path/to/tibetan_text.txt")
+print(indices)  # [150, 2450, 5200, ...]
+```
 
+Extract from text string:
 
-## Contributing guidelines
-If you'd like to help out, check out our [contributing guidelines](/CONTRIBUTING.md).
+```python
+# Extract from text string
+text = "..."  # Your Tibetan text
+indices = extract_toc_indices(text=text)
+```
 
+### Advanced Configuration
 
-## Additional documentation
-_Include links and brief descriptions to additional documentation._
+```python
+indices = extract_toc_indices(
+    text=text,
+    provider="gemini",              # Explicitly choose provider
+    model="gemini-1.5-pro",         # Use specific model
+    chars_per_page=2000,            # Chars per page (for estimation)
+    fuzzy_threshold=0.9,            # Fuzzy match threshold (0.0-1.0)
+)
+```
 
-For more information:
-* [Reference link 1](#)
-* [Reference link 2](#)
-* [Reference link 3](#)
+### For Backend Integration
 
+Your backend should:
 
-## How to get help
-* File an issue.
-* Email us at openpecha[at]gmail.com.
-* Join our [discord](https://discord.com/invite/7GFpPFSTeA).
+1. **Install the package**:
+   ```bash
+   pip install ai_text_outline[gemini]
+   ```
 
+2. **Set the API key** in your environment:
+   ```bash
+   export GEMINI_API_KEY="your-key"
+   ```
 
-## Terms of use
-_Project Name_ is licensed under the [MIT License](/LICENSE.md).
+3. **Call the function** when a user clicks the ToC extraction button:
+   ```python
+   from ai_text_outline import extract_toc_indices
+
+   @app.post("/extract-toc")
+   def extract_toc(request):
+       # Option 1: From file path
+       file_path = request.json.get("file_path")
+       
+       # Option 2: From text content
+       text = request.json.get("text")
+       
+       try:
+           indices = extract_toc_indices(file_path=file_path, text=text)
+           return {"success": True, "indices": indices}
+       except ValueError as e:
+           return {"success": False, "error": str(e)}, 400
+   ```
+
+## Return Value
+
+Returns a **sorted list of integers** representing character indices where each ToC section begins:
+
+```python
+[150, 2450, 5200]  # Character positions in the text
+```
+
+If no ToC is found, returns an empty list: `[]`
+
+## How It Works
+
+### Pipeline Overview
+
+1. **Load text** from file or string
+2. **Find ToC section** using དཀར་ཆག markers (or use first quarter/100 pages as fallback)
+3. **Extract ToC entries** using regex patterns
+4. **Fallback to LLM** if regex fails (sends only ToC section, not whole text)
+5. **Locate section starts** by page markers (if present) or fuzzy title matching
+6. **Return sorted indices**
+
+### ToC Section Detection
+
+The package looks for དཀར་ཆག (Table of Contents marker) in the text:
+- Takes the **first occurrence** as ToC start
+- Takes the **last occurrence** as ToC body end anchor
+- Extends until a **double newline** or **4 more pages**, whichever comes first
+
+### Entry Extraction
+
+Attempts regex patterns first:
+- Tibetan text + delimiter (༎ ། . …) + page number
+- Supports both Arabic (0-9) and Tibetan numerals (༠-༩)
+
+If regex fails, sends the extracted ToC section to LLM for structured extraction (JSON format).
+
+### Section Location
+
+For each ToC entry:
+1. If page numbers exist in text: finds page marker, returns position after it
+2. If no page markers: fuzzy matches the title using `rapidfuzz`
+   - Searches within ±50% of expected page offset
+   - Picks best match with similarity ≥ 90%
+   - If no match found: skips silently (not included in output)
+
+## Error Handling
+
+- **ValueError**: Raised if neither or both of `file_path`/`text` provided
+- **FileNotFoundError**: Raised if file doesn't exist
+- **UnicodeDecodeError**: Raised if file is not UTF-8 encoded
+- **ValueError**: Raised if no API key is configured
+
+For LLM errors (rate limits, auth failures), the package logs a warning and returns an empty list `[]`.
+
+## Logging
+
+Enable debug logging to see detailed extraction steps:
+
+```python
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+indices = extract_toc_indices(text=text)
+```
+
+Debug output shows:
+- Text length loaded
+- Provider and model used
+- Whether དཀར་ཆག section was found
+- Number of ToC entries extracted
+- Which entries couldn't be located
+
+## Requirements
+
+- Python 3.9+
+- At least one LLM API key (Gemini, OpenAI, or Claude)
+
+## Performance Notes
+
+- Typical Tibetan texts (< 1000 pages): ~1-2 seconds
+- Large texts (> 1000 pages): ~2-5 seconds depending on ToC complexity
+- Only sends ToC section to LLM (not full text) → much cheaper API calls
+
+## Troubleshooting
+
+### "No API key found" Error
+
+Make sure you've set one of these environment variables:
+- `GEMINI_API_KEY`
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+
+Check with:
+```bash
+echo $GEMINI_API_KEY
+```
+
+### LLM Returns Empty Response
+
+This typically means:
+1. The ToC format is unusual (try looking at the text manually)
+2. The LLM couldn't identify the structure (try a different model or provider)
+3. API rate limit reached (wait and retry)
+
+Enable debug logging to see what text was sent to the LLM:
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+```
+
+### Regex Extraction Works But Indices Are Wrong
+
+The fuzzy matching threshold (default 0.9) may be too strict. Try:
+```python
+indices = extract_toc_indices(text=text, fuzzy_threshold=0.85)
+```
+
+## License
+
+MIT License — See LICENSE file for details

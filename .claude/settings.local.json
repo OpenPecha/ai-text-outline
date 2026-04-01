@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm src/ai_text_outline/example.py)",
+      "Bash(rm tests/test_example.py)",
+      "Bash(pip install:*)",
+      "Bash(python -m py_compile src/ai_text_outline/*.py)",
+      "Bash(python -m py_compile tests/*.py)",
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(python:*)"
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "success": true,
+  "file": "tests/data/test.txt",
+  "indices_found": 39,
+  "first_10_indices": [
+    439,
+    516,
+    597,
+    672,
+    735,
+    808,
+    899,
+    938,
+    989,
+    1044
+  ],
+  "note": "Pipeline successfully extracted ToC section, parsed entries, and found starting indices"
+}
