@@ -1,43 +1,24 @@
-"""Multi-provider LLM abstraction with lazy imports."""
+"""Gemini LLM interface."""
 
 from __future__ import annotations
 
-import logging
-
-from ._config import Config, Provider
-
-logger = logging.getLogger(__name__)
+import json
+import re
 
 
-def call_llm(prompt: str, config: Config) -> str:
-    """
-    Call the appropriate LLM provider.
-
-    Dispatches to Gemini, OpenAI, or Claude based on config.provider.
+def call_gemini(prompt: str, api_key: str) -> dict[str, int]:
+    """Call Gemini and parse ToC response.
 
     Args:
         prompt: The prompt text to send
-        config: Configuration with provider and API key
+        api_key: Gemini API key
 
     Returns:
-        Raw text response from LLM
+        Dictionary mapping title to page number. Empty dict if extraction fails.
 
     Raises:
-        ImportError: If the provider SDK is not installed
-        Exception: On API errors (rate limit, auth, etc.)
+        ImportError: If google-generativeai is not installed
     """
-    if config.provider == Provider.GEMINI:
-        return _call_gemini(prompt, config.model, config.api_key)
-    elif config.provider == Provider.OPENAI:
-        return _call_openai(prompt, config.model, config.api_key)
-    elif config.provider == Provider.CLAUDE:
-        return _call_claude(prompt, config.model, config.api_key)
-    else:
-        raise ValueError(f"Unknown provider: {config.provider}")
-
-
-def _call_gemini(prompt: str, model: str, api_key: str) -> str:
-    """Call Google Gemini API. Lazy import of google-generativeai."""
     try:
         import google.generativeai as genai
     except ImportError:
@@ -47,47 +28,33 @@ def _call_gemini(prompt: str, model: str, api_key: str) -> str:
         )
 
     genai.configure(api_key=api_key)
-    model_obj = genai.GenerativeModel(model)
-    response = model_obj.generate_content(prompt)
-    return response.text
+    model = genai.GenerativeModel("gemini-2.0-flash")
+    response = model.generate_content(prompt)
+    return _parse_response(response.text)
 
 
-def _call_openai(prompt: str, model: str, api_key: str) -> str:
-    """Call OpenAI API. Lazy import of openai."""
+def _parse_response(text: str) -> dict[str, int]:
+    """Parse JSON response from LLM.
+
+    Handles markdown code blocks and extracts {"toc": {...}} structure.
+
+    Args:
+        text: Raw response text from LLM
+
+    Returns:
+        Dictionary mapping title (str) to page number (int). Empty dict on parse error.
+    """
+    # Strip markdown fences
+    text = re.sub(r"```(?:json)?\s*|\s*```", "", text).strip()
+
+    # Extract outermost {...}
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if not m:
+        return {}
+
     try:
-        from openai import OpenAI
-    except ImportError:
-        raise ImportError(
-            "openai is not installed. "
-            "Install it with: pip install openai"
-        )
-
-    client = OpenAI(api_key=api_key)
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "user", "content": prompt}
-        ],
-    )
-    return response.choices[0].message.content
-
-
-def _call_claude(prompt: str, model: str, api_key: str) -> str:
-    """Call Anthropic Claude API. Lazy import of anthropic."""
-    try:
-        from anthropic import Anthropic
-    except ImportError:
-        raise ImportError(
-            "anthropic is not installed. "
-            "Install it with: pip install anthropic"
-        )
-
-    client = Anthropic(api_key=api_key)
-    response = client.messages.create(
-        model=model,
-        max_tokens=2048,
-        messages=[
-            {"role": "user", "content": prompt}
-        ],
-    )
-    return response.content[0].text
+        data = json.loads(m.group())
+        toc = data.get("toc", {})
+        return {str(k): int(v) for k, v in toc.items()}
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return {}
