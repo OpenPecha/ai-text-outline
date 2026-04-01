@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai_text_outline"
-version = "0.1.0"
+version = "0.1.1"
 authors = [
   { name="OpenPecha", email="dev@openpecha.org" },
 ]
@@ -18,17 +18,12 @@ classifiers = [
 ]
 dependencies = [
     "rapidfuzz>=3.0.0",
-]
-
-[project.optional-dependencies]
-gemini = ["google-generativeai>=0.5.0"]
-openai = ["openai>=1.0.0"]
-claude = ["anthropic>=0.20.0"]
-all = [
     "google-generativeai>=0.5.0",
     "openai>=1.0.0",
     "anthropic>=0.20.0",
 ]
+
+[project.optional-dependencies]
 dev = [
     "pytest",
     "pytest-cov",
