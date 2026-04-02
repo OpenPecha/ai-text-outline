@@ -18,6 +18,7 @@ def call_gemini(prompt: str, api_key: str) -> dict[str, int]:
 
     Raises:
         ImportError: If google-generativeai is not installed
+        ValueError: If context length is exceeded
     """
     try:
         import google.generativeai as genai
@@ -27,10 +28,16 @@ def call_gemini(prompt: str, api_key: str) -> dict[str, int]:
             "Install it with: pip install google-generativeai"
         )
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    response = model.generate_content(prompt)
-    return _parse_response(response.text)
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        response = model.generate_content(prompt)
+        return _parse_response(response.text)
+    except Exception as e:
+        error_msg = str(e).lower()
+        if any(keyword in error_msg for keyword in ["context", "token", "quota", "too large", "too long"]):
+            raise ValueError(f"Context length exceeded: {e}")
+        raise
 
 
 def _parse_response(text: str) -> dict[str, int]:

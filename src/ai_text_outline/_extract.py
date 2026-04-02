@@ -19,7 +19,7 @@ def extract_toc_indices(
 
     Pipeline:
       1. Validate and load input text
-      2. Extract ToC section (first 1/5 of text)
+      2. Extract ToC section (first 1/5 of text, with fallback to 1/10 and 1/100)
       3. Call Gemini 1: Get ToC titles + page numbers
       4. Find all occurrences of each title in full text
       5. Determine ToC boundary using last title's first occurrence
@@ -34,6 +34,14 @@ def extract_toc_indices(
     Returns:
         Sorted list of character indices where each ToC section begins.
         Returns empty list if no ToC found.
+
+    Note:
+        For each title, only the first 10 occurrences are considered to prevent
+        context window overflow in large texts. This is sufficient since the first
+        occurrence is usually in the ToC and the second in the actual content.
+
+        If the first ToC extraction call exceeds context limits, automatically retries
+        with progressively smaller text slices: 1/5 → 1/10 → 1/100.
 
     Raises:
         ValueError: If neither or both inputs provided, or no API key found.
@@ -56,20 +64,34 @@ def extract_toc_indices(
             "No Gemini API key. Set GEMINI_API_KEY env var or pass gemini_api_key="
         )
 
-    # Step 1: Extract ToC section (first 1/5 of text)
-    toc_section = text[: len(text) // 5]
+    # Step 1-2: Try extracting ToC with progressively smaller text slices
+    # Start with 1/5, fallback to 1/10, then 1/100 if context is exceeded
+    fractions = [5, 10, 100]
+    toc_dict = {}
 
-    # Step 2: Call Gemini 1 to get ToC titles + page numbers
-    prompt1 = get_toc_extraction_prompt(toc_section)
-    toc_dict = call_gemini(prompt1, api_key)
+    for fraction in fractions:
+        try:
+            toc_section = text[: len(text) // fraction]
+            prompt1 = get_toc_extraction_prompt(toc_section)
+            toc_dict = call_gemini(prompt1, api_key)
+            break  # Success, stop retrying
+        except ValueError as e:
+            if "context" not in str(e).lower():
+                raise  # Re-raise if not a context error
+            if fraction == fractions[-1]:
+                # Last attempt failed, return empty
+                return []
+            # Continue to next fraction
 
     if not toc_dict:
         return []
 
     # Step 3: Find all occurrences of each title in full text
+    # Truncate to first 10 to prevent context window overflow in Gemini Call 2
     candidates = {}
     for title in toc_dict:
-        candidates[title] = [m.start() for m in re.finditer(re.escape(title), text)]
+        all_matches = [m.start() for m in re.finditer(re.escape(title), text)]
+        candidates[title] = all_matches[:10]  # Keep first 10 occurrences max
 
     # Step 4: Find ToC boundary (first occurrence of last/highest-page title)
     last_title = max(toc_dict, key=lambda t: toc_dict[t])

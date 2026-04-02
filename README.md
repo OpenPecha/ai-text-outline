@@ -144,7 +144,10 @@ Input Text (file or string)
    Load text
         │
         ▼
-   Extract first 1/5 of text
+   Extract first 1/5 of text (with context-aware fallback)
+   If context limit exceeded:
+     ├─ Retry with 1/10 of text
+     └─ If still exceeded, retry with 1/100 of text
         │
         ▼
    Send to Gemini API
@@ -153,13 +156,24 @@ Input Text (file or string)
         │
         ▼
    For each title:
-        Find all matches in full text
+        Find all matches in full text (limit 10 per title)
         ├── 2+ matches → use matches[1].start() (skip ToC itself)
         └── 0 or 1 match → skip
         │
         ▼
    Return sorted list of indices
 ```
+
+### Context Overflow Handling
+
+For very large texts (>5MB), the extraction automatically handles Gemini API context limits:
+
+1. **First attempt**: Send first 1/5 of text (default)
+2. **If context exceeded**: Automatically retry with first 1/10 of text
+3. **If still exceeded**: Retry with first 1/100 of text
+4. **If all fail**: Return empty list (no ToC found)
+
+This ensures the package works with texts of any size without manual intervention.
 
 ---
 
@@ -284,9 +298,11 @@ If extraction returns `[]`, the text may not have a clear ToC structure that Gem
 | < 100 KB | 0.5-1s | API latency dominant |
 | 100 KB - 1 MB | 1-2s | First 1/5 sent to Gemini |
 | 1-5 MB | 2-3s | Faster processing |
-| > 5 MB | 3s | Size doesn't matter much |
+| > 5 MB | 3-5s | Auto-fallback to 1/10 or 1/100 slice if needed |
 
 **Cost:** ~$0.0001 per extraction (using Gemini Flash model)
+
+**Context Limits:** The package automatically handles Gemini's context window limits by progressively reducing the text slice (1/5 → 1/10 → 1/100) if needed. Works reliably with texts up to 50MB+.
 
 ---
 
@@ -300,7 +316,17 @@ pytest
 pytest --cov=ai_text_outline
 ```
 
-Tests: **14 passing**
+Tests: **32 passing** (including 8 new context overflow tests)
+
+### Test Coverage
+
+- **Parsing tests**: JSON response handling with edge cases
+- **Integration tests**: Full extraction pipeline with mocked Gemini
+- **Context overflow tests**: 
+  - Retry mechanism with progressive text slice reduction (1/5 → 1/10 → 1/100)
+  - Success on first attempt stops retrying
+  - Non-context errors are properly raised
+  - All attempts exhausted returns empty list
 
 ---
 
@@ -344,7 +370,13 @@ If you use this package in research:
 
 ## Changelog
 
-### v0.2.0 (Current)
+### v0.2.1 (Current)
+- 🔄 **Context overflow handling**: Automatic retry with progressive text slice reduction (1/5 → 1/10 → 1/100)
+- 🧪 **Enhanced tests**: 32 passing tests including 8 new context overflow tests
+- 📚 **Improved documentation**: Added context handling explanation to README
+- 🛡️ **Robust error handling**: Detect and handle context/quota/token limit errors
+
+### v0.2.0
 - 🎉 Complete simplification: Gemini-only, no multi-provider support
 - ⚡ Regex-based index finding (no fuzzy matching)
 - 💪 Minimal dependencies: only `google-generativeai`

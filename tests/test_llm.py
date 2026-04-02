@@ -94,3 +94,72 @@ def test_parse_indices_response_non_int_values():
     result = _parse_indices_response(response)
     # Should handle the error gracefully
     assert isinstance(result, list)
+
+
+# Tests for context error handling in call_gemini
+
+
+def test_call_gemini_context_error_handling(monkeypatch):
+    """Test that call_gemini raises ValueError on context length errors."""
+    from ai_text_outline._llm import call_gemini
+    from unittest.mock import MagicMock, patch
+    import sys
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    # Mock the genai module before it's imported in call_gemini
+    mock_genai = MagicMock()
+    mock_model = MagicMock()
+    mock_genai.GenerativeModel.return_value = mock_model
+
+    # Simulate context length error
+    mock_model.generate_content.side_effect = Exception(
+        "Request failed with status code 400: Request body is too large"
+    )
+
+    with patch.dict(sys.modules, {"google.generativeai": mock_genai}):
+        with pytest.raises(ValueError, match="Context length exceeded"):
+            call_gemini("some prompt", "test-key")
+
+
+def test_call_gemini_token_quota_error_handling(monkeypatch):
+    """Test that call_gemini raises ValueError on token quota errors."""
+    from ai_text_outline._llm import call_gemini
+    from unittest.mock import MagicMock, patch
+    import sys
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    mock_genai = MagicMock()
+    mock_model = MagicMock()
+    mock_genai.GenerativeModel.return_value = mock_model
+
+    # Simulate quota error
+    mock_model.generate_content.side_effect = Exception(
+        "Quota exceeded for quota metric 'tokens' and 'token-per-min-per-user'"
+    )
+
+    with patch.dict(sys.modules, {"google.generativeai": mock_genai}):
+        with pytest.raises(ValueError, match="Context length exceeded"):
+            call_gemini("some prompt", "test-key")
+
+
+def test_call_gemini_other_errors_not_caught(monkeypatch):
+    """Test that call_gemini re-raises non-context errors."""
+    from ai_text_outline._llm import call_gemini
+    from unittest.mock import MagicMock, patch
+    import sys
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    mock_genai = MagicMock()
+    mock_model = MagicMock()
+    mock_genai.GenerativeModel.return_value = mock_model
+
+    # Simulate a different error (not context-related)
+    mock_model.generate_content.side_effect = RuntimeError("API connection failed")
+
+    with patch.dict(sys.modules, {"google.generativeai": mock_genai}):
+        # Should re-raise the original error
+        with pytest.raises(RuntimeError, match="API connection failed"):
+            call_gemini("some prompt", "test-key")

@@ -97,3 +97,124 @@ def test_extract_toc_indices_with_file(monkeypatch, tmp_path):
         result = extract_toc_indices(file_path=str(test_file))
         assert isinstance(result, list)
         assert len(result) == 2
+
+
+# Tests for context length handling
+
+def test_context_error_retries_with_smaller_slice(monkeypatch):
+    """Test that context error on 1/5 triggers retry with 1/10."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    # Create a large text with chapter titles included
+    large_text = (
+        "Some intro text.\n"
+        "Chapter 1\n"
+        "Chapter 2\n"
+        + ("x" * 10000) +
+        "\nChapter 1 starts here\nContent\nChapter 2 starts here\nMore content"
+    )
+
+    with patch("ai_text_outline._extract.call_gemini") as mock_gemini1, \
+         patch("ai_text_outline._extract.call_gemini_for_indices") as mock_gemini2:
+
+        # First call (1/5) raises context error, second call (1/10) succeeds
+        mock_gemini1.side_effect = [
+            ValueError("Context length exceeded: Input too long"),
+            {"Chapter 1": 1, "Chapter 2": 2}
+        ]
+        mock_gemini2.return_value = [100, 200]
+
+        result = extract_toc_indices(text=large_text)
+
+        # Should succeed with fallback
+        assert result == [100, 200]
+        # Should have been called twice
+        assert mock_gemini1.call_count == 2
+
+
+def test_context_error_cascades_through_fractions(monkeypatch):
+    """Test that context errors cascade through 1/5 → 1/10 → 1/100."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    large_text = (
+        "Some intro text.\n"
+        "Chapter X\n"
+        "Chapter Y\n"
+        + ("y" * 20000) +
+        "\nChapter X starts here\nContent\nChapter Y starts here\nMore"
+    )
+
+    with patch("ai_text_outline._extract.call_gemini") as mock_gemini1, \
+         patch("ai_text_outline._extract.call_gemini_for_indices") as mock_gemini2:
+
+        # First call (1/5) and second call (1/10) fail, third call (1/100) succeeds
+        mock_gemini1.side_effect = [
+            ValueError("Context length exceeded: Input too long (1/5)"),
+            ValueError("Context length exceeded: Input too long (1/10)"),
+            {"Chapter X": 1, "Chapter Y": 2}
+        ]
+        mock_gemini2.return_value = [150, 250]
+
+        result = extract_toc_indices(text=large_text)
+
+        # Should succeed with final fallback (1/100)
+        assert result == [150, 250]
+        # Should have been called 3 times (5, 10, 100)
+        assert mock_gemini1.call_count == 3
+
+
+def test_context_error_exhausts_all_fractions(monkeypatch):
+    """Test that all fractions exhausted returns empty list."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    text = "Some text to extract"
+
+    with patch("ai_text_outline._extract.call_gemini") as mock_gemini1:
+        # All attempts fail
+        mock_gemini1.side_effect = ValueError(
+            "Context length exceeded: Even 1/100 is too long"
+        )
+
+        result = extract_toc_indices(text=text)
+
+        # Should return empty list when all attempts fail
+        assert result == []
+        # Should have tried 3 times (5, 10, 100)
+        assert mock_gemini1.call_count == 3
+
+
+def test_success_on_first_fraction_stops_retrying(monkeypatch):
+    """Test that successful first call (1/5) doesn't retry."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    text = "Some text.\nChapter 1\nChapter 2\nChapter 1 real\nChapter 2 real"
+
+    with patch("ai_text_outline._extract.call_gemini") as mock_gemini1, \
+         patch("ai_text_outline._extract.call_gemini_for_indices") as mock_gemini2:
+
+        mock_gemini1.return_value = {"Chapter 1": 1, "Chapter 2": 2}
+        mock_gemini2.return_value = [50, 100]
+
+        result = extract_toc_indices(text=text)
+
+        # Should succeed
+        assert result == [50, 100]
+        # Should only be called once (no retries needed)
+        assert mock_gemini1.call_count == 1
+
+
+def test_non_context_error_is_raised(monkeypatch):
+    """Test that non-context errors are not caught and retried."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    text = "Some text"
+
+    with patch("ai_text_outline._extract.call_gemini") as mock_gemini1:
+        # Raise a different error (not context-related)
+        mock_gemini1.side_effect = RuntimeError("API connection failed")
+
+        with pytest.raises(RuntimeError, match="API connection failed"):
+            extract_toc_indices(text=text)
+
+        # Should only be called once (no retry for non-context errors)
+        assert mock_gemini1.call_count == 1
