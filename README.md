@@ -139,11 +139,13 @@ for i, start_idx in enumerate(indices):
 
 ## How It Works
 
+### Pipeline Overview
+
 ```
 Input Text (file or string)
         │
         ▼
-   Load text
+   Load text + Validate
         │
         ▼
    Extract first 1/5 of text (with context-aware fallback)
@@ -152,19 +154,63 @@ Input Text (file or string)
      └─ If still exceeded, retry with 1/100 of text
         │
         ▼
-   Send to Gemini API
-        → Extracts ToC titles
+   🔄 LLM CALL 1: Gemini Extract ToC
+        → Analyzes text for དཀར་ཆག section
         → Returns JSON: {"toc": {"Title": page_num, ...}}
         │
         ▼
-   For each title:
-        Find all matches in full text (limit 10 per title)
-        ├── 2+ matches → use matches[1].start() (skip ToC itself)
-        └── 0 or 1 match → skip
+   📍 AUTO-DETECT PAGE FORMAT
+        Try -N- format (e.g., -5-, -170-)
+        Else try standalone N format (e.g., 170, 200)
         │
         ▼
-   Return sorted list of indices
+   🔍 PAGE-NUMBER BASED MATCHING (Primary Method)
+        For each section (in page order):
+          First section → Use ToC boundary index
+          Other sections → Find page(N-1) marker
+          
+          If page found:
+            ├─ 1 match → Use it ✓
+            ├─ 0 matches → Fall back to title matching
+            └─ 2+ matches → Go to LLM Call 2
+        │
+        ▼
+   📝 FALLBACK A: Title Matching (if page not found)
+        Search for title string in body text
+        Use first occurrence after ToC boundary
+        │
+        ▼
+   🔄 LLM CALL 2: Disambiguate (if multiple page matches)
+        For sections with ambiguous page positions
+        LLM selects correct index from candidates
+        │
+        ▼
+   Return sorted list of section start indices
 ```
+
+### Page-Number Detection
+
+The package intelligently detects how page numbers are formatted in the text:
+
+**Format 1: Running Page Markers**
+```
+-1-
+Content of page 1
+-2-
+Content of page 2
+```
+Pattern: `^-{n}-$` (regex)
+
+**Format 2: Standalone Numbers**
+```
+170
+Content of page 170
+171
+Content of page 171
+```
+Pattern: `^\d+$` (standalone line)
+
+Both formats are auto-detected and handled transparently.
 
 ### Context Overflow Handling
 
@@ -176,6 +222,15 @@ For very large texts (>5MB), the extraction automatically handles Gemini API con
 4. **If all fail**: Return empty list (no ToC found)
 
 This ensures the package works with texts of any size without manual intervention.
+
+### Fallback Strategy
+
+If page-number matching fails:
+- **Missing page marker** → Falls back to title string matching
+- **Multiple page matches** → Uses LLM (Call 2) to disambiguate
+- **Title not found** → Section is skipped (not included in output)
+
+This ensures robust extraction even with inconsistent text formatting.
 
 ---
 
@@ -254,6 +309,73 @@ def extract_toc():
     except Exception as e:
         return {'error': f'Extraction failed: {str(e)}'}, 500
 ```
+
+---
+
+## Advanced: Page-Number Matching
+
+### Why Page Numbers?
+
+Page numbers are more reliable than titles for locating sections because:
+- **Consistent**: Every page has a marker (not every section has a unique title)
+- **Unique**: Page 170 only appears at page 170 (titles may repeat)
+- **Structural**: Page markers define document boundaries reliably
+
+### How It Works
+
+1. **Extract page numbers from ToC** (via LLM call 1)
+   - ToC: `{"Section A": 5, "Section B": 10, "Section C": 15}`
+
+2. **Detect page format** in the body text
+   ```
+   Sample: -1-, -2-, ..., -5-, ..., -10-
+   → Detected: -N- format
+   ```
+
+3. **Find section start using page N-1**
+   - Section B at page 10 → Search for page 9 marker
+   - Position after page 9 = start of section B
+
+4. **Edge cases handled**
+   - First section (page 1) → Use ToC boundary (no page 0)
+   - Page marker missing → Fall back to title search
+   - Multiple page matches → Let LLM disambiguate
+
+### Example
+
+**Text structure:**
+```
+དཀར་ཆག
+Section A (page 5)
+Section B (page 10)
+-4-  ← ToC boundary
+
+-5-
+Section A content starts here
+...
+
+-10-
+Section B content starts here
+...
+```
+
+**Process:**
+```
+1. Extract: {"Section A": 5, "Section B": 10}
+2. Detect: -N- format
+3. Find page 4 marker → not found
+4. First section (page 5) → use ToC boundary at -4-
+5. Find page 9 marker → not found → fall back to title search
+6. Result: [toc_boundary_index, section_b_title_index]
+```
+
+### Supported Formats
+
+| Format | Example | Pattern |
+|--------|---------|---------|
+| Running pages | `-1-`, `-2-`, `-170-` | `^-\d+-$` |
+| Standalone | `1`, `170`, `200` | `^\d+$` |
+| Mixed | Auto-detected | One per text |
 
 ---
 
@@ -374,9 +496,17 @@ If you use this package in research:
 
 ## Changelog
 
-### v0.3.1 (Current)
+### v0.4.0 (Current)
+- 🎯 **Page-number regex matching**: Primary method for section detection
+- 📍 **Auto-detect formats**: `-N-` or standalone N page numbering
+- 🔄 **Smart fallbacks**: Title matching + LLM disambiguation
+- 🧪 **38 passing tests**: Including 6 new page-matching tests
+- 📖 **Enhanced documentation**: Detailed how-it-works section
+- 🛡️ **Robust error handling**: Graceful fallbacks for edge cases
+
+### v0.3.1
 - ⚡ **Model upgrade**: Switched to Gemini 2.5 Flash (75% cheaper, faster)
-- 💰 **Lower costs**: ~$0.00002 per extraction (down from $0.0005)
+- 💰 **Lower costs**: ~$0.00002 per extraction
 - 🚀 **Improved speed**: Faster response times with Flash model
 - 📈 **Better efficiency**: Optimized for ToC extraction tasks
 
