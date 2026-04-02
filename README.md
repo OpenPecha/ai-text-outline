@@ -17,6 +17,8 @@
 
 **ai-text-outline** is a simple Python package that extracts Table of Contents (དཀར་ཆག) from Tibetan text and returns character indices where each section begins.
 
+Uses **Gemini 1.5 Pro** for reliable, cost-effective ToC extraction with automatic context overflow handling.
+
 Perfect for:
 - 📚 **Digital publishing** - Index Tibetan manuscripts automatically
 - 🔍 **Text analysis** - Locate sections in large Tibetan documents
@@ -300,9 +302,11 @@ If extraction returns `[]`, the text may not have a clear ToC structure that Gem
 | 1-5 MB | 2-3s | Faster processing |
 | > 5 MB | 3-5s | Auto-fallback to 1/10 or 1/100 slice if needed |
 
-**Cost:** ~$0.0001 per extraction (using Gemini Flash model)
+**Cost:** ~$0.0005 per extraction (using Gemini 1.5 Pro)
 
-**Context Limits:** The package automatically handles Gemini's context window limits by progressively reducing the text slice (1/5 → 1/10 → 1/100) if needed. Works reliably with texts up to 50MB+.
+**Model:** Gemini 1.5 Pro is used by default for stable, reliable extraction with 1M context window.
+
+**Context Limits:** The package automatically handles context window limits by progressively reducing the text slice (1/5 → 1/10 → 1/100) if needed. Works reliably with texts up to 50MB+.
 
 ---
 
@@ -370,7 +374,13 @@ If you use this package in research:
 
 ## Changelog
 
-### v0.2.1 (Current)
+### v0.2.2 (Current)
+- 🔧 **Model upgrade**: Changed from deprecated `gemini-2.0-flash` to stable `gemini-1.5-pro`
+- 🚀 **Better model availability handling**: Detects and reports unavailable models with clear error messages
+- 📊 **Improved cost estimates**: Updated to reflect Gemini 1.5 Pro pricing (~$0.0005 per extraction)
+- 🛡️ **Enhanced error messages**: Better handling of model deprecation warnings
+
+### v0.2.1
 - 🔄 **Context overflow handling**: Automatic retry with progressive text slice reduction (1/5 → 1/10 → 1/100)
 - 🧪 **Enhanced tests**: 32 passing tests including 8 new context overflow tests
 - 📚 **Improved documentation**: Added context handling explanation to README

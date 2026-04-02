@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai_text_outline"
-version = "0.2.1"
+version = "0.2.2"
 authors = [
   { name="OpenPecha", email="dev@openpecha.org" },
 ]

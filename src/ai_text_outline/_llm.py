@@ -30,13 +30,15 @@ def call_gemini(prompt: str, api_key: str) -> dict[str, int]:
 
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        model = genai.GenerativeModel("gemini-1.5-pro")
         response = model.generate_content(prompt)
         return _parse_response(response.text)
     except Exception as e:
         error_msg = str(e).lower()
         if any(keyword in error_msg for keyword in ["context", "token", "quota", "too large", "too long"]):
             raise ValueError(f"Context length exceeded: {e}")
+        if any(keyword in error_msg for keyword in ["not found", "no longer available", "not supported"]):
+            raise ImportError(f"Model not available: {e}")
         raise
 
 
@@ -88,10 +90,18 @@ def call_gemini_for_indices(prompt: str, api_key: str) -> list[int]:
             "Install it with: pip install google-generativeai"
         )
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    response = model.generate_content(prompt)
-    return _parse_indices_response(response.text)
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-1.5-pro")
+        response = model.generate_content(prompt)
+        return _parse_indices_response(response.text)
+    except Exception as e:
+        error_msg = str(e).lower()
+        if any(keyword in error_msg for keyword in ["context", "token", "quota", "too large", "too long"]):
+            raise ValueError(f"Context length exceeded: {e}")
+        if any(keyword in error_msg for keyword in ["not found", "no longer available", "not supported"]):
+            raise ImportError(f"Model not available: {e}")
+        raise
 
 
 def _parse_indices_response(text: str) -> list[int]:
