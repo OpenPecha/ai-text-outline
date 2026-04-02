@@ -53,7 +53,7 @@ Perfect for:
 pip install ai-text-outline
 ```
 
-Requires: Python 3.9+, Google Generative AI SDK (installed automatically)
+Requires: Python 3.9+, Google Genai SDK (installed automatically)
 
 ---
 
@@ -374,7 +374,14 @@ If you use this package in research:
 
 ## Changelog
 
-### v0.2.2 (Current)
+### v0.3.0 (Current)
+- 🔄 **SDK upgrade**: Migrated from deprecated `google.generativeai` to `google.genai`
+- 🚀 **Eliminated FutureWarning**: No more deprecation warnings from Google's old SDK
+- ✅ **Future-proof**: Uses Google's officially maintained `google.genai` package
+- 🧪 **All tests passing**: Updated test mocks for new API structure
+- 📦 **Cleaner dependencies**: Uses latest Google Genai SDK
+
+### v0.2.2
 - 🔧 **Model upgrade**: Changed from deprecated `gemini-2.0-flash` to stable `gemini-1.5-pro`
 - 🚀 **Better model availability handling**: Detects and reports unavailable models with clear error messages
 - 📊 **Improved cost estimates**: Updated to reflect Gemini 1.5 Pro pricing (~$0.0005 per extraction)

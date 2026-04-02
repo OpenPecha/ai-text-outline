@@ -17,21 +17,23 @@ def call_gemini(prompt: str, api_key: str) -> dict[str, int]:
         Dictionary mapping title to page number. Empty dict if extraction fails.
 
     Raises:
-        ImportError: If google-generativeai is not installed
+        ImportError: If google-genai is not installed
         ValueError: If context length is exceeded
     """
     try:
-        import google.generativeai as genai
+        import google.genai as genai
     except ImportError:
         raise ImportError(
-            "google-generativeai is not installed. "
-            "Install it with: pip install google-generativeai"
+            "google-genai is not installed. "
+            "Install it with: pip install google-genai"
         )
 
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-pro")
-        response = model.generate_content(prompt)
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-1.5-pro",
+            contents=prompt
+        )
         return _parse_response(response.text)
     except Exception as e:
         error_msg = str(e).lower()
@@ -80,20 +82,22 @@ def call_gemini_for_indices(prompt: str, api_key: str) -> list[int]:
         List of character indices. Empty list if selection fails.
 
     Raises:
-        ImportError: If google-generativeai is not installed
+        ImportError: If google-genai is not installed
     """
     try:
-        import google.generativeai as genai
+        import google.genai as genai
     except ImportError:
         raise ImportError(
-            "google-generativeai is not installed. "
-            "Install it with: pip install google-generativeai"
+            "google-genai is not installed. "
+            "Install it with: pip install google-genai"
         )
 
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-pro")
-        response = model.generate_content(prompt)
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-1.5-pro",
+            contents=prompt
+        )
         return _parse_indices_response(response.text)
     except Exception as e:
         error_msg = str(e).lower()
