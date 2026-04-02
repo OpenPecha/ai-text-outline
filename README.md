@@ -17,7 +17,7 @@
 
 **ai-text-outline** is a simple Python package that extracts Table of Contents (དཀར་ཆག) from Tibetan text and returns character indices where each section begins.
 
-Uses **Gemini 1.5 Pro** for reliable, cost-effective ToC extraction with automatic context overflow handling.
+Uses **Gemini 2.5 Flash** for fast, reliable ToC extraction with automatic context overflow handling.
 
 Perfect for:
 - 📚 **Digital publishing** - Index Tibetan manuscripts automatically
@@ -302,9 +302,9 @@ If extraction returns `[]`, the text may not have a clear ToC structure that Gem
 | 1-5 MB | 2-3s | Faster processing |
 | > 5 MB | 3-5s | Auto-fallback to 1/10 or 1/100 slice if needed |
 
-**Cost:** ~$0.0005 per extraction (using Gemini 1.5 Pro)
+**Cost:** ~$0.00002 per extraction (using Gemini 2.5 Flash - 75% cheaper!)
 
-**Model:** Gemini 1.5 Pro is used by default for stable, reliable extraction with 1M context window.
+**Model:** Gemini 2.5 Flash is used by default for fast, efficient extraction with 1M context window.
 
 **Context Limits:** The package automatically handles context window limits by progressively reducing the text slice (1/5 → 1/10 → 1/100) if needed. Works reliably with texts up to 50MB+.
 
@@ -374,7 +374,13 @@ If you use this package in research:
 
 ## Changelog
 
-### v0.3.0 (Current)
+### v0.3.1 (Current)
+- ⚡ **Model upgrade**: Switched to Gemini 2.5 Flash (75% cheaper, faster)
+- 💰 **Lower costs**: ~$0.00002 per extraction (down from $0.0005)
+- 🚀 **Improved speed**: Faster response times with Flash model
+- 📈 **Better efficiency**: Optimized for ToC extraction tasks
+
+### v0.3.0
 - 🔄 **SDK upgrade**: Migrated from deprecated `google.generativeai` to `google.genai`
 - 🚀 **Eliminated FutureWarning**: No more deprecation warnings from Google's old SDK
 - ✅ **Future-proof**: Uses Google's officially maintained `google.genai` package

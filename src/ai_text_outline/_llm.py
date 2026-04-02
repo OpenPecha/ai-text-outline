@@ -31,7 +31,7 @@ def call_gemini(prompt: str, api_key: str) -> dict[str, int]:
     try:
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
-            model="gemini-1.5-pro",
+            model="gemini-2.5-flash",
             contents=prompt
         )
         return _parse_response(response.text)
@@ -95,7 +95,7 @@ def call_gemini_for_indices(prompt: str, api_key: str) -> list[int]:
     try:
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
-            model="gemini-1.5-pro",
+            model="gemini-2.5-flash",
             contents=prompt
         )
         return _parse_indices_response(response.text)
