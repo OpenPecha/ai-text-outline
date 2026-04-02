@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 import re
 
-from ._llm import call_gemini
-from ._prompt import get_toc_extraction_prompt
+from ._llm import call_gemini, call_gemini_for_indices
+from ._prompt import get_toc_extraction_prompt, get_index_selection_prompt
 
 
 def extract_toc_indices(
@@ -20,9 +20,11 @@ def extract_toc_indices(
     Pipeline:
       1. Validate and load input text
       2. Extract ToC section (first 1/5 of text)
-      3. Send to Gemini to get ToC titles
-      4. Find second occurrence of each title in full text
-      5. Return sorted list of indices
+      3. Call Gemini 1: Get ToC titles + page numbers
+      4. Find all occurrences of each title in full text
+      5. Determine ToC boundary using last title's first occurrence
+      6. Call Gemini 2: Select correct index for each title
+      7. Return sorted list of indices
 
     Args:
         file_path: Path to text file (UTF-8 encoded). Mutually exclusive with text.
@@ -54,21 +56,33 @@ def extract_toc_indices(
             "No Gemini API key. Set GEMINI_API_KEY env var or pass gemini_api_key="
         )
 
-    # Extract ToC section (first 1/5 of text)
+    # Step 1: Extract ToC section (first 1/5 of text)
     toc_section = text[: len(text) // 5]
 
-    # Get ToC titles from Gemini
-    prompt = get_toc_extraction_prompt(toc_section)
-    toc_dict = call_gemini(prompt, api_key)
+    # Step 2: Call Gemini 1 to get ToC titles + page numbers
+    prompt1 = get_toc_extraction_prompt(toc_section)
+    toc_dict = call_gemini(prompt1, api_key)
 
     if not toc_dict:
         return []
 
-    # Find second occurrence of each title in full text
-    indices = []
+    # Step 3: Find all occurrences of each title in full text
+    candidates = {}
     for title in toc_dict:
-        matches = list(re.finditer(re.escape(title), text))
-        if len(matches) >= 2:
-            indices.append(matches[1].start())
+        candidates[title] = [m.start() for m in re.finditer(re.escape(title), text)]
+
+    # Step 4: Find ToC boundary (first occurrence of last/highest-page title)
+    last_title = max(toc_dict, key=lambda t: toc_dict[t])
+    last_title_occurrences = candidates.get(last_title, [])
+
+    if not last_title_occurrences:
+        # Can't determine ToC boundary, can't proceed
+        return []
+
+    last_toc_title_index = last_title_occurrences[0]
+
+    # Step 5: Call Gemini 2 to select correct index for each title
+    prompt2 = get_index_selection_prompt(toc_dict, candidates, last_toc_title_index)
+    indices = call_gemini_for_indices(prompt2, api_key)
 
     return sorted(indices)

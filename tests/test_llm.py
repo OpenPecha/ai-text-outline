@@ -2,7 +2,7 @@
 
 import pytest
 
-from ai_text_outline._llm import _parse_response
+from ai_text_outline._llm import _parse_response, _parse_indices_response
 
 
 def test_parse_response_valid_json():
@@ -47,3 +47,50 @@ def test_parse_response_with_extra_text():
     response = "Here is the ToC: {\"toc\": {\"Ch1\": 5}} Thank you!"
     result = _parse_response(response)
     assert result == {"Ch1": 5}
+
+
+# Tests for _parse_indices_response
+
+def test_parse_indices_response_valid_json():
+    """Test parsing valid indices JSON."""
+    response = '{"indices": [100, 2000, 5000]}'
+    result = _parse_indices_response(response)
+    assert result == [100, 2000, 5000]
+
+
+def test_parse_indices_response_with_markdown():
+    """Test parsing indices JSON wrapped in markdown fences."""
+    response = """```json
+{"indices": [150, 3000, 7500]}
+```"""
+    result = _parse_indices_response(response)
+    assert result == [150, 3000, 7500]
+
+
+def test_parse_indices_response_empty_indices():
+    """Test parsing response with empty indices."""
+    response = '{"indices": []}'
+    result = _parse_indices_response(response)
+    assert result == []
+
+
+def test_parse_indices_response_missing_key():
+    """Test parsing when indices key is missing."""
+    response = '{"data": [100, 200]}'
+    result = _parse_indices_response(response)
+    assert result == []
+
+
+def test_parse_indices_response_invalid_json():
+    """Test parsing invalid JSON."""
+    response = "This is not JSON"
+    result = _parse_indices_response(response)
+    assert result == []
+
+
+def test_parse_indices_response_non_int_values():
+    """Test parsing when indices contain non-integer values."""
+    response = '{"indices": [100, "not an int", 5000]}'
+    result = _parse_indices_response(response)
+    # Should handle the error gracefully
+    assert isinstance(result, list)

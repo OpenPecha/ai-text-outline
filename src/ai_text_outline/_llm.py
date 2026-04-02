@@ -58,3 +58,57 @@ def _parse_response(text: str) -> dict[str, int]:
         return {str(k): int(v) for k, v in toc.items()}
     except (json.JSONDecodeError, ValueError, TypeError):
         return {}
+
+
+def call_gemini_for_indices(prompt: str, api_key: str) -> list[int]:
+    """Call Gemini for index selection from candidates.
+
+    Args:
+        prompt: The prompt text with ToC and candidates
+        api_key: Gemini API key
+
+    Returns:
+        List of character indices. Empty list if selection fails.
+
+    Raises:
+        ImportError: If google-generativeai is not installed
+    """
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        raise ImportError(
+            "google-generativeai is not installed. "
+            "Install it with: pip install google-generativeai"
+        )
+
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-2.0-flash")
+    response = model.generate_content(prompt)
+    return _parse_indices_response(response.text)
+
+
+def _parse_indices_response(text: str) -> list[int]:
+    """Parse JSON response with indices from LLM.
+
+    Handles markdown code blocks and extracts {"indices": [...]} structure.
+
+    Args:
+        text: Raw response text from LLM
+
+    Returns:
+        List of integer indices. Empty list on parse error.
+    """
+    # Strip markdown fences
+    text = re.sub(r"```(?:json)?\s*|\s*```", "", text).strip()
+
+    # Extract outermost {...}
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if not m:
+        return []
+
+    try:
+        data = json.loads(m.group())
+        indices = data.get("indices", [])
+        return [int(i) for i in indices]
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return []
