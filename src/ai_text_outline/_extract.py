@@ -69,7 +69,7 @@ def extract_toc_indices(
     text: str | None = None,
     *,
     gemini_api_key: str | None = None,
-) -> list[int]:
+) -> dict:
     """Extract Table of Contents indices from Tibetan text.
 
     Pipeline:
@@ -79,7 +79,7 @@ def extract_toc_indices(
       4. Detect page-number pattern (e.g., -N-, or standalone N)
       5. For each section, find page N-1 marker → use position after it
       6. Fallbacks: if page not found → title matching; if multiple pages → LLM call 2
-      7. Return sorted list of indices
+      7. Return sorted list of indices with TOC mapping
 
     Args:
         file_path: Path to text file (UTF-8 encoded). Mutually exclusive with text.
@@ -87,8 +87,10 @@ def extract_toc_indices(
         gemini_api_key: Gemini API key. Falls back to GEMINI_API_KEY env var if None.
 
     Returns:
-        Sorted list of character indices where each ToC section begins.
-        Returns empty list if no ToC found.
+        Dictionary with keys "breakpoints" and "toc":
+        - "breakpoints": sorted list of character indices where each ToC section begins
+        - "toc": dictionary mapping title to page number from AI extraction
+        Returns {"breakpoints": [], "toc": {}} if no ToC found.
 
     Raises:
         ValueError: If neither or both inputs provided, or no API key found.
@@ -125,11 +127,11 @@ def extract_toc_indices(
             if "context" not in str(e).lower():
                 raise
             if fraction == fractions[-1]:
-                return []
+                return {"breakpoints": [], "toc": {}}
             continue
 
     if not toc_dict:
-        return []
+        return {"breakpoints": [], "toc": {}}
 
     # Find ToC boundary using last title's first title occurrence
     # (fallback to ensure we have a boundary marker)
@@ -139,7 +141,7 @@ def extract_toc_indices(
     ]
 
     if not last_title_matches:
-        return []
+        return {"breakpoints": [], "toc": {}}
 
     last_toc_title_index = last_title_matches[0]
 
@@ -208,5 +210,8 @@ def extract_toc_indices(
                     confirmed_indices[title] = llm_idx
                     break
 
-    # Return sorted indices for all successfully found sections
-    return sorted(confirmed_indices.values())
+    # Return sorted indices with TOC mapping
+    return {
+        "breakpoints": sorted(confirmed_indices.values()),
+        "toc": toc_dict,
+    }

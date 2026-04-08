@@ -47,11 +47,13 @@ def test_extract_toc_indices_with_mocked_gemini(monkeypatch):
 
         result = extract_toc_indices(text=text)
 
-        assert isinstance(result, list)
-        assert len(result) == 2
-        assert all(isinstance(idx, int) for idx in result)
+        assert isinstance(result, dict)
+        assert "breakpoints" in result and "toc" in result
+        assert len(result["breakpoints"]) == 2
+        assert all(isinstance(idx, int) for idx in result["breakpoints"])
         # Indices should be in ascending order
-        assert result == sorted(result)
+        assert result["breakpoints"] == sorted(result["breakpoints"])
+        assert result["toc"] == {"Chapter 1": 1, "Chapter 2": 2}
 
 
 def test_extract_toc_indices_title_appears_once(monkeypatch):
@@ -68,8 +70,9 @@ def test_extract_toc_indices_title_appears_once(monkeypatch):
 
         result = extract_toc_indices(text=text)
         # Title fallback should find it in the body
-        assert isinstance(result, list)
-        assert len(result) > 0
+        assert isinstance(result, dict)
+        assert "breakpoints" in result and "toc" in result
+        assert len(result["breakpoints"]) > 0
 
 
 def test_extract_toc_indices_empty_toc(monkeypatch):
@@ -80,7 +83,7 @@ def test_extract_toc_indices_empty_toc(monkeypatch):
         mock_gemini1.return_value = {}
 
         result = extract_toc_indices(text="Some text here")
-        assert result == []
+        assert result == {"breakpoints": [], "toc": {}}
 
 
 def test_extract_toc_indices_with_file(monkeypatch, tmp_path):
@@ -97,8 +100,9 @@ def test_extract_toc_indices_with_file(monkeypatch, tmp_path):
         mock_gemini2.return_value = [60, 100]  # Returned indices
 
         result = extract_toc_indices(file_path=str(test_file))
-        assert isinstance(result, list)
-        assert len(result) == 2
+        assert isinstance(result, dict)
+        assert "breakpoints" in result and "toc" in result
+        assert len(result["breakpoints"]) == 2
 
 
 # Tests for context length handling
@@ -130,8 +134,9 @@ def test_context_error_retries_with_smaller_slice(monkeypatch):
         result = extract_toc_indices(text=large_text)
 
         # Should succeed with fallback, using page markers or title fallback
-        assert isinstance(result, list)
-        assert len(result) >= 0
+        assert isinstance(result, dict)
+        assert "breakpoints" in result and "toc" in result
+        assert len(result["breakpoints"]) >= 0
         # Should have been called twice
         assert mock_gemini1.call_count == 2
 
@@ -162,7 +167,8 @@ def test_context_error_cascades_through_fractions(monkeypatch):
         result = extract_toc_indices(text=large_text)
 
         # Should succeed with final fallback (1/100)
-        assert isinstance(result, list)
+        assert isinstance(result, dict)
+        assert "breakpoints" in result and "toc" in result
         # Should have tried 3 times (5, 10, 100)
         assert mock_gemini1.call_count == 3
 
@@ -180,8 +186,8 @@ def test_context_error_exhausts_all_fractions(monkeypatch):
 
         result = extract_toc_indices(text=text)
 
-        # Should return empty list when all attempts fail
-        assert result == []
+        # Should return empty dict when all attempts fail
+        assert result == {"breakpoints": [], "toc": {}}
         # Should have tried 3 times (5, 10, 100)
         assert mock_gemini1.call_count == 3
 
@@ -201,7 +207,8 @@ def test_success_on_first_fraction_stops_retrying(monkeypatch):
         result = extract_toc_indices(text=text)
 
         # Should succeed
-        assert isinstance(result, list)
+        assert isinstance(result, dict)
+        assert "breakpoints" in result and "toc" in result
         # Should only be called once (no retries needed)
         assert mock_gemini1.call_count == 1
 
@@ -309,7 +316,8 @@ Section 2 content
 
         # Result should include the first section starting right after ToC
         # (actual indices depend on pattern detection and page matching)
-        assert isinstance(result, list)
+        assert isinstance(result, dict)
+        assert "breakpoints" in result and "toc" in result
 
 
 def test_missing_page_falls_back_to_title_match(monkeypatch):
@@ -339,11 +347,12 @@ More content
 
         # Should fall back to title matching
         # "Section Alpha" and "Section Beta" appear in the text
-        assert isinstance(result, list)
+        assert isinstance(result, dict)
+        assert "breakpoints" in result and "toc" in result
         # Both sections should be found via title fallback
-        if len(result) > 0:
+        if len(result["breakpoints"]) > 0:
             assert any(
-                text[idx:].startswith("Section") for idx in result
+                text[idx:].startswith("Section") for idx in result["breakpoints"]
             )
 
 
@@ -379,7 +388,8 @@ Chapter B content
 
         # LLM call 2 should have been invoked if multiple matches found
         # (or at least the pipeline should handle it)
-        assert isinstance(result, list)
+        assert isinstance(result, dict)
+        assert "breakpoints" in result and "toc" in result
 
 
 def test_non_context_error_is_raised(monkeypatch):

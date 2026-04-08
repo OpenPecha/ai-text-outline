@@ -96,7 +96,7 @@ def extract_toc_indices(
     text: str | None = None,
     *,
     gemini_api_key: str | None = None,
-) -> list[int]
+) -> dict
 ```
 
 #### Parameters
@@ -109,7 +109,11 @@ def extract_toc_indices(
 
 #### Returns
 
-**`list[int]`** - Sorted character indices where each ToC section begins. Empty list `[]` if no ToC found.
+**`dict`** - Dictionary with keys:
+- `"breakpoints"` (list[int]): Sorted character indices where each ToC section begins
+- `"toc"` (dict[str, int]): Mapping of section titles to page numbers from AI extraction
+
+Returns `{"breakpoints": [], "toc": {}}` if no ToC found.
 
 #### Raises
 
@@ -126,7 +130,14 @@ def extract_toc_indices(
 from ai_text_outline import extract_toc_indices
 
 text = open('book.txt', encoding='utf-8').read()
-indices = extract_toc_indices(text=text)
+result = extract_toc_indices(text=text)
+
+# Access the extracted ToC and breakpoints
+indices = result["breakpoints"]
+toc = result["toc"]
+
+print(f"Found TOC: {toc}")
+print(f"Section breakpoints: {indices}")
 
 # Use indices to extract sections
 for i, start_idx in enumerate(indices):
@@ -244,9 +255,10 @@ import os
 
 os.environ['GEMINI_API_KEY'] = 'AIzaSy...'
 
-indices = extract_toc_indices(file_path='texts/book.txt')
-print(f"Found {len(indices)} sections")
-print(indices)  # [0, 450, 2100, 5800, ...]
+result = extract_toc_indices(file_path='texts/book.txt')
+print(f"Found {len(result['breakpoints'])} sections")
+print(f"Breakpoints: {result['breakpoints']}")  # [0, 450, 2100, 5800, ...]
+print(f"TOC: {result['toc']}")  # {"Chapter 1": 5, "Chapter 2": 10, ...}
 ```
 
 ### Example 2: Extract Sections
@@ -254,7 +266,9 @@ print(indices)  # [0, 450, 2100, 5800, ...]
 ```python
 from ai_text_outline import extract_toc_indices
 
-indices = extract_toc_indices(file_path='book.txt')
+result = extract_toc_indices(file_path='book.txt')
+indices = result["breakpoints"]
+toc = result["toc"]
 text = open('book.txt', encoding='utf-8').read()
 
 # Split into sections
@@ -263,6 +277,7 @@ for i, start_idx in enumerate(indices):
     end_idx = indices[i+1] if i+1 < len(indices) else len(text)
     sections.append(text[start_idx:end_idx])
 
+print(f"Extracted TOC: {toc}")
 for i, section in enumerate(sections):
     print(f"Section {i}: {len(section)} chars")
 ```
@@ -295,14 +310,15 @@ def extract_toc():
     text_content = data.get('text')
     
     try:
-        indices = extract_toc_indices(
+        result = extract_toc_indices(
             file_path=file_path,
             text=text_content,
         )
         return {
             'success': True,
-            'indices': indices,
-            'count': len(indices),
+            'breakpoints': result['breakpoints'],
+            'toc': result['toc'],
+            'count': len(result['breakpoints']),
         }
     except ValueError as e:
         return {'error': str(e)}, 400
@@ -496,7 +512,15 @@ If you use this package in research:
 
 ## Changelog
 
-### v0.4.0 (Current)
+### v0.5.0 (Current)
+- 🔄 **Breaking change**: Return value now includes extracted TOC
+  - Old: `list[int]` (breakpoints only)
+  - New: `dict` with `"breakpoints"` and `"toc"` keys
+  - Allows downstream tools to verify extraction accuracy
+- 📚 **Better API**: Access both indices and AI-extracted TOC mapping
+- 📖 **Updated examples**: Shows how to use new return format
+
+### v0.4.0
 - 🎯 **Page-number regex matching**: Primary method for section detection
 - 📍 **Auto-detect formats**: `-N-` or standalone N page numbering
 - 🔄 **Smart fallbacks**: Title matching + LLM disambiguation
