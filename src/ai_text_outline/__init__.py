@@ -9,4 +9,4 @@ Main public API:
 from ._extract import extract_toc_indices
 
 __all__ = ["extract_toc_indices"]
-__version__ = "0.5.0"
+__version__ = "0.6.0"

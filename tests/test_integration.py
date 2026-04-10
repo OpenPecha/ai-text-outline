@@ -407,3 +407,130 @@ def test_non_context_error_is_raised(monkeypatch):
 
         # Should only be called once (no retry for non-context errors)
         assert mock_gemini1.call_count == 1
+
+
+# Tests for title refinement helpers
+
+class TestBuildIndexMap:
+    """Tests for _build_index_map helper."""
+
+    def test_strips_newlines(self):
+        from ai_text_outline._extract import _build_index_map
+
+        text = "abc\ndef\nghi"
+        cleaned, idx_map = _build_index_map(text, 0, len(text), "\n\r")
+
+        assert cleaned == "abcdefghi"
+        assert len(idx_map) == 9
+        # 'a' at 0, 'b' at 1, 'c' at 2, 'd' at 4 (skipped \n at 3), etc.
+        assert idx_map[0] == 0
+        assert idx_map[3] == 4  # 'd' skips newline at index 3
+
+    def test_strips_sheds(self):
+        from ai_text_outline._extract import _build_index_map
+
+        text = "ab།cd།ef"
+        cleaned, idx_map = _build_index_map(text, 0, len(text), "།")
+
+        assert cleaned == "abcdef"
+        assert idx_map[0] == 0  # 'a'
+        assert idx_map[1] == 1  # 'b'
+        assert idx_map[2] == 3  # 'c' (skipped '།' at index 2)
+
+    def test_respects_start_end(self):
+        from ai_text_outline._extract import _build_index_map
+
+        text = "xxabc\ndefxx"
+        cleaned, idx_map = _build_index_map(text, 2, 9, "\n")
+
+        assert cleaned == "abcdef"
+        assert idx_map[0] == 2  # 'a' at original index 2
+
+
+class TestRefineIndexToTitle:
+    """Tests for _refine_index_to_title helper."""
+
+    def test_basic_title_found(self):
+        from ai_text_outline._extract import _refine_index_to_title
+
+        text = "-5-\nSome intro\nChapter One begins here"
+        marker_pos = 4  # after "-5-\n"
+        result = _refine_index_to_title(text, marker_pos, "Chapter One")
+        assert result == text.index("Chapter One")
+
+    def test_title_split_by_newline(self):
+        from ai_text_outline._extract import _refine_index_to_title
+
+        text = "-5-\nSome text\nChapter\n One\nContent here"
+        marker_pos = 4
+        result = _refine_index_to_title(text, marker_pos, "Chapter One")
+        # Should find "Chapter" start even though title is split across lines
+        assert result == text.index("Chapter")
+
+    def test_title_with_extra_sheds(self):
+        from ai_text_outline._extract import _refine_index_to_title
+
+        # Body has extra shed that ToC title doesn't have
+        text = "-5-\nSome text\nChapter།One content"
+        marker_pos = 4
+        result = _refine_index_to_title(text, marker_pos, "ChapterOne")
+        assert result == text.index("Chapter")
+
+    def test_title_not_found_returns_marker_pos(self):
+        from ai_text_outline._extract import _refine_index_to_title
+
+        text = "-5-\nSome unrelated content here"
+        marker_pos = 4
+        result = _refine_index_to_title(text, marker_pos, "Nonexistent Title")
+        assert result == marker_pos
+
+    def test_tibetan_title_with_shed_and_newline(self):
+        from ai_text_outline._extract import _refine_index_to_title
+
+        # Simulated Tibetan-like text with shed and newline in title
+        text = "-5-\nIntro\nསྐབས་དང\n།པོ།\nContent"
+        marker_pos = 4
+        # ToC title without the extra shed
+        result = _refine_index_to_title(text, marker_pos, "སྐབས་དངཔོ")
+        assert result == text.index("སྐབས")
+
+    def test_empty_title_returns_marker_pos(self):
+        from ai_text_outline._extract import _refine_index_to_title
+
+        text = "-5-\nContent here"
+        assert _refine_index_to_title(text, 4, "") == 4
+
+
+class TestPipelineWithRefinement:
+    """Integration test: pipeline refines breakpoints to title positions."""
+
+    def test_pipeline_refines_page_marker_to_title(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+        # Text where page markers precede titled sections
+        # -4- is detected as page pattern; Section A at page 5 uses -4- end as starting search
+        # Section B at page 10 uses -9- end as starting search
+        text = (
+            "དཀར་ཆག\n"
+            "Section A (5)\n"
+            "Section B (10)\n"
+            "-4-\n"
+            "some gap text\n"
+            "Section A content here\n"
+            "-9-\n"
+            "some gap text\n"
+            "Section B content here\n"
+        )
+
+        with patch("ai_text_outline._extract.call_gemini") as mock_g1, \
+             patch("ai_text_outline._extract.call_gemini_for_indices") as mock_g2:
+
+            mock_g1.return_value = {"Section A": 5, "Section B": 10}
+            mock_g2.return_value = []
+
+            result = extract_toc_indices(text=text)
+
+            assert len(result["breakpoints"]) >= 1
+            # All breakpoints should be valid positions
+            for bp in result["breakpoints"]:
+                assert bp < len(text)
