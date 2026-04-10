@@ -9,6 +9,79 @@ from ._llm import call_gemini, call_gemini_for_indices
 from ._prompt import get_toc_extraction_prompt, get_index_selection_prompt
 
 
+def _build_index_map(text: str, start: int, end: int, strip_chars: str) -> tuple[str, list[int]]:
+    """Build a cleaned version of text[start:end] with an index mapping back to original positions.
+
+    Args:
+        text: Full text
+        start: Start index in text
+        end: End index in text
+        strip_chars: Characters to remove (e.g. '\\n\\r' or '།')
+
+    Returns:
+        Tuple of (cleaned_text, index_map) where index_map[i] is the original
+        position in `text` corresponding to cleaned_text[i].
+    """
+    cleaned = []
+    index_map = []
+    for i in range(start, min(end, len(text))):
+        if text[i] not in strip_chars:
+            cleaned.append(text[i])
+            index_map.append(i)
+    return "".join(cleaned), index_map
+
+
+def _refine_index_to_title(
+    text: str, marker_pos: int, title: str, next_boundary: int | None = None
+) -> int:
+    """Refine a page-marker position to the actual title start position.
+
+    Searches for the title in a window after marker_pos, handling newlines
+    in the title and extra shed characters (།).
+
+    Args:
+        text: Full text
+        marker_pos: Character index to start searching from (e.g. end of page marker)
+        title: The section title to search for
+        next_boundary: Optional upper bound for the search window
+
+    Returns:
+        Original text index where the title begins, or marker_pos if not found.
+    """
+    if not title:
+        return marker_pos
+
+    window_end = next_boundary if next_boundary is not None else marker_pos + 5000
+    window_end = min(window_end, len(text))
+
+    if marker_pos >= window_end:
+        return marker_pos
+
+    # Layer 1: strip newlines → flat text + flat_to_orig mapping
+    flat_text, flat_to_orig = _build_index_map(text, marker_pos, window_end, "\n\r")
+    if not flat_text:
+        return marker_pos
+
+    # Layer 2: strip sheds from flat text → norm text + norm_to_flat mapping
+    norm_text, norm_to_flat = _build_index_map(flat_text, 0, len(flat_text), "།")
+    if not norm_text:
+        return marker_pos
+
+    # Normalize title: strip sheds, then escape for regex
+    norm_title = title.replace("།", "")
+    if not norm_title:
+        return marker_pos
+
+    pattern = re.escape(norm_title)
+    m = re.search(pattern, norm_text)
+    if m:
+        # Map back: norm position → flat position → original position
+        flat_idx = norm_to_flat[m.start()]
+        return flat_to_orig[flat_idx]
+
+    return marker_pos
+
+
 def _detect_page_pattern(text: str, toc_dict: dict[str, int], after_index: int) -> str | None:
     """Detect page-number pattern in text.
 
@@ -209,6 +282,18 @@ def extract_toc_indices(
                 if llm_idx in positions:
                     confirmed_indices[title] = llm_idx
                     break
+
+    # Step 6: Refine each breakpoint to the actual title start position
+    sorted_titles = sorted(confirmed_indices, key=lambda t: confirmed_indices[t])
+    for i, title in enumerate(sorted_titles):
+        if i + 1 < len(sorted_titles):
+            next_bound = confirmed_indices[sorted_titles[i + 1]]
+        else:
+            next_bound = None
+        refined = _refine_index_to_title(
+            text, confirmed_indices[title], title, next_bound
+        )
+        confirmed_indices[title] = refined
 
     # Return sorted indices with TOC mapping
     return {
