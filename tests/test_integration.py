@@ -240,7 +240,7 @@ def test_page_pattern_detection_dash_n_format(monkeypatch):
 
     pattern = _detect_page_pattern(text, toc_dict, toc_boundary)
 
-    assert pattern == "^-{n}-$"
+    assert pattern == ("^-{n}-$", "arabic")
 
 
 def test_page_pattern_detection_standalone_format(monkeypatch):
@@ -267,7 +267,7 @@ def test_page_pattern_detection_standalone_format(monkeypatch):
 
     pattern = _detect_page_pattern(text, toc_dict, toc_boundary)
 
-    assert pattern == r"^\s*{n}\s*$"
+    assert pattern == (r"^\s*{n}\s*$", "arabic")
 
 
 def test_page_marker_positions_finds_marker(monkeypatch):

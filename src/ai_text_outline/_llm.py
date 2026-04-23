@@ -6,12 +6,17 @@ import json
 import re
 
 
-def call_gemini(prompt: str, api_key: str) -> dict[str, int]:
+def call_gemini(
+    prompt: str,
+    api_key: str,
+    images: list[bytes] | None = None,
+) -> dict[str, int]:
     """Call Gemini and parse ToC response.
 
     Args:
         prompt: The prompt text to send
         api_key: Gemini API key
+        images: Optional list of JPEG image bytes to include (multimodal)
 
     Returns:
         Dictionary mapping title to page number. Empty dict if extraction fails.
@@ -22,6 +27,7 @@ def call_gemini(prompt: str, api_key: str) -> dict[str, int]:
     """
     try:
         import google.genai as genai
+        from google.genai import types
     except ImportError:
         raise ImportError(
             "google-genai is not installed. "
@@ -30,15 +36,27 @@ def call_gemini(prompt: str, api_key: str) -> dict[str, int]:
 
     try:
         client = genai.Client(api_key=api_key)
+
+        if images:
+            contents = [prompt]
+            for img_bytes in images:
+                contents.append(
+                    types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg")
+                )
+        else:
+            contents = prompt
+
         response = client.models.generate_content(
             model="gemini-2.5-flash",
-            contents=prompt
+            contents=contents,
         )
         return _parse_response(response.text)
     except Exception as e:
         error_msg = str(e).lower()
         if any(keyword in error_msg for keyword in ["context", "token", "quota", "too large", "too long"]):
             raise ValueError(f"Context length exceeded: {e}")
+        if "api key" in error_msg or "api_key" in error_msg:
+            raise RuntimeError(f"API key error: {e}")
         if any(keyword in error_msg for keyword in ["not found", "no longer available", "not supported"]):
             raise ImportError(f"Model not available: {e}")
         raise
@@ -103,6 +121,8 @@ def call_gemini_for_indices(prompt: str, api_key: str) -> list[int]:
         error_msg = str(e).lower()
         if any(keyword in error_msg for keyword in ["context", "token", "quota", "too large", "too long"]):
             raise ValueError(f"Context length exceeded: {e}")
+        if "api key" in error_msg or "api_key" in error_msg:
+            raise RuntimeError(f"API key error: {e}")
         if any(keyword in error_msg for keyword in ["not found", "no longer available", "not supported"]):
             raise ImportError(f"Model not available: {e}")
         raise
@@ -130,6 +150,86 @@ def _parse_indices_response(text: str) -> list[int]:
     try:
         data = json.loads(m.group())
         indices = data.get("indices", [])
+        return [int(i) for i in indices]
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return []
+
+
+def call_gemini_for_no_marker(
+    prompt: str,
+    api_key: str,
+    images: list[bytes] | None = None,
+) -> list[int]:
+    """Call Gemini to confirm chapter-start pages for a no-marker pecha.
+
+    The expected model output is ``{"confirmed_indices": [int, ...]}``.
+
+    Args:
+        prompt: The prompt text (from ``get_no_marker_chapter_prompt``).
+        api_key: Gemini API key.
+        images: Optional list of JPEG image bytes, one per candidate, in the
+            same order as the candidates listed in the prompt.
+
+    Returns:
+        List of confirmed ``char_start`` indices. Empty list if none.
+
+    Raises:
+        ImportError: If google-genai is not installed.
+        ValueError: If context length is exceeded.
+        RuntimeError: If the API key is invalid.
+    """
+    try:
+        import google.genai as genai
+        from google.genai import types
+    except ImportError:
+        raise ImportError(
+            "google-genai is not installed. "
+            "Install it with: pip install google-genai"
+        )
+
+    try:
+        client = genai.Client(api_key=api_key)
+
+        if images:
+            contents: list = [prompt]
+            for img_bytes in images:
+                contents.append(
+                    types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg")
+                )
+        else:
+            contents = prompt
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=contents,
+        )
+        return _parse_confirmed_indices_response(response.text)
+    except Exception as e:
+        error_msg = str(e).lower()
+        if any(k in error_msg for k in ["context", "token", "quota", "too large", "too long"]):
+            raise ValueError(f"Context length exceeded: {e}")
+        if "api key" in error_msg or "api_key" in error_msg:
+            raise RuntimeError(f"API key error: {e}")
+        if any(k in error_msg for k in ["not found", "no longer available", "not supported"]):
+            raise ImportError(f"Model not available: {e}")
+        raise
+
+
+def _parse_confirmed_indices_response(text: str) -> list[int]:
+    """Parse ``{"confirmed_indices": [...]}`` from a Gemini response.
+
+    Accepts markdown code fences around the JSON. Returns an empty list on
+    parse errors.
+    """
+    text = re.sub(r"```(?:json)?\s*|\s*```", "", text).strip()
+
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if not m:
+        return []
+
+    try:
+        data = json.loads(m.group())
+        indices = data.get("confirmed_indices", [])
         return [int(i) for i in indices]
     except (json.JSONDecodeError, ValueError, TypeError):
         return []
